@@ -106,3 +106,83 @@ test = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,M
 head(rawtoTibble(test$content))
 ```
 
+## Write Main Function
+
+This function will take in a number of user inputs and return a tibble with the census data corresponding to the API call
+
+Requirements:
+
+Year:
+
+-   Inputs
+
+    -   Should be a integer between 2010 and 2022
+
+Numeric Variables:
+Options for the user should be AGEP, GASP, GRPIP, JWAP (time), JWDP (time), and
+JWMNP
+
+Your function should turn variables into numeric values or time values (use the middle of the time period) where appropriate. This might require you to write a helper function or two!
+
+For missing time values, assign the value an NA
+
+One numeric variable other than PWGTP must be returned (Check for this in input)
+
+```{r}
+getCensusData = function(year = 2022, 
+                         numericVars = c("AGEP"),
+                         categoricalVars = c("SEX"),
+                         geoLevel = "State",
+                         spec = "NC"){
+  if (!(year > 2009) & (year < 2023)){
+    stop("Bad Year Input. Try Again")
+  }
+  
+  
+  
+  acceptableNumericVars = c("AGEP", "GASP", "GRPIP", "JWAP", "JWDP", "JWMNP")
+  for (i in length(numericVars)){
+    ##IF  PWGTP is given as an input, remove it from the vector, as we will return it anyway
+    if(numericVars[i] == "PWGTP"){
+      numericVars = numericVars[-c(i)]
+    }
+    ## Check to see if the numeric variables provided are in the list
+    if (!(numericVars[i] %in% acceptableNumericVars)){
+      stop("Bad Numeric Variable Input. Try Again")
+    }
+  }
+  # If we don't request anything, stop
+  if (length(numericVars) == 0){
+    stop("You must select one of the following numeric variables: 
+         AGEP, GASP, GRPIP, JWAP, JWDP, JWMNP")
+  }
+  
+  ## Categorial
+  acceptableCategoricalVars = c("FER", "HHL", "SCH", "SCHL","SEX")
+  for (i in length(categoricalVars)){
+    ## Check to see if the categorical variables provided are in the list
+    if (!(categoricalVars[i] %in% acceptableCategoricalVars)){
+      stop("Bad Categorical Variable Input. Try Again")
+    }
+  }
+  
+  ## Region: Check if the user only gives 1 region and it's in the list
+  acceptableRegionLabels = c("Region", "Division", "State")
+  if (!(geoLevel %in% acceptableRegionLabels) & (length(geoLevel) ==1)){
+    stop("Bad Geography Variable Input Try Again")
+  }
+  
+  ## Build API Call URL
+  
+  baseUrl = "https://api.census.gov/data/2024/acs/acs1/pums?"
+  
+  
+  
+  
+  return("Made it")
+}
+
+
+
+getCensusData(geoLevel = c("Region"))
+```
