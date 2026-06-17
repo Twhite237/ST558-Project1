@@ -1,0 +1,108 @@
+---
+title: "Project1"
+format: html
+editor: visual
+---
+
+# Project 1
+
+## Executive Summary:
+
+## Prerequisites:
+
+```{r}
+#| message: false
+library(httr)
+library(jsonlite)
+library(tidyverse)
+apiKey = "4c8e34087cd2fa65ceac20aca5e806b356fffe37"
+```
+
+## Working with the PUMS API
+
+First, we will test the API to see the types of data that it provides
+
+```{r}
+
+resp = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,MAR&for=region:*&SCHL=24&key=4c8e34087cd2fa65ceac20aca5e806b356fffe37")
+
+resp$status_code
+```
+
+```{r}
+respString = rawToChar(resp$content)
+
+respString
+```
+
+The data looks to be formatted like a list of lists. The first row are the requested column headers, and each subsequent row represents an individual in the census. We will need to figure out how to translate the the large character string into a tibble.
+
+After some research, this is a form of JSON, so we can use the fromJSON() function to convert to a matrix.
+
+First we will see if we can convert to a matrix, then let's confirm.
+
+```{r}
+
+respMat = (fromJSON((respString)))
+
+class(respMat)
+```
+
+This is a matrix, try to format as a tibble
+
+```{r}
+census = as_tibble(respMat)
+
+head(census)
+```
+
+This is better, but the first row should be column headers.
+
+```{r}
+
+
+
+names(census) = census[1,]
+
+census = census |> slice(-1)
+
+head(census)
+
+
+```
+
+Looks good!
+
+## Helper Function to Convert API Response
+
+The helper function will take a raw response from an API call and return a tibble.
+
+This function makes certain assumptions about how the data from the Census API are structured.
+
+Assumptions:
+
+-   The first row of the returned data will always contain the row names
+-   The schema will always be JSON list of lists
+
+```{r}
+
+
+rawtoTibble = function(rawResp){
+  respTibble = as_tibble(fromJSON((respString)))
+  names(respTibble) = respTibble[1, ]
+  respTibble = respTibble |>  slice(-1)
+  
+  return(respTibble)
+}
+
+
+```
+
+Test with an API response:
+
+```{r}
+test = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,MAR&for=region:*&SCHL=24&key=4c8e34087cd2fa65ceac20aca5e806b356fffe37")
+
+head(rawtoTibble(test$content))
+```
+
