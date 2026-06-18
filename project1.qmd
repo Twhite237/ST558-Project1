@@ -88,7 +88,7 @@ Assumptions:
 
 
 rawtoTibble = function(rawResp){
-  respTibble = as_tibble(fromJSON((respString)))
+  respTibble = as_tibble(fromJSON(rawToChar(rawResp)))
   names(respTibble) = respTibble[1, ]
   respTibble = respTibble |>  slice(-1)
   
@@ -101,9 +101,12 @@ rawtoTibble = function(rawResp){
 Test with an API response:
 
 ```{r}
-test = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,MAR&for=region:*&SCHL=24&key=4c8e34087cd2fa65ceac20aca5e806b356fffe37")
+test = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,MAR&for=division:*&SCHL=24&key=4c8e34087cd2fa65ceac20aca5e806b356fffe37")
 
 head(rawtoTibble(test$content))
+
+
+
 ```
 
 ## Write Main Function
@@ -127,6 +130,141 @@ Your function should turn variables into numeric values or time values (use the 
 For missing time values, assign the value an NA
 
 One numeric variable other than PWGTP must be returned (Check for this in input)
+
+### Helper For Returning State Code
+
+This function can take strings of many forms representing the desired state and return the corresponding state code needed to query the API
+
+```{r}
+
+getStateCode = function(stateStr){
+  stateMap = '{
+          "47": "Tennessee/TN",
+          "04": "Arizona/AZ",
+          "05": "Arkansas/AR",
+          "49": "Utah/UT",
+          "09": "Connecticut/CT",
+          "50": "Vermont/VT",
+          "28": "Mississippi/MS",
+          "37": "North Carolina/NC",
+          "42": "Pennsylvania/PA",
+          "45": "South Carolina/SC",
+          "51": "Virginia/VA",
+          "15": "Hawaii/HI",
+          "25": "Massachusetts/MA",
+          "72": "Puerto Rico/PR",
+          "30": "Montana/MT",
+          "33": "New Hampshire/NH",
+          "35": "New Mexico/NM",
+          "12": "Florida/FL",
+          "48": "Texas/TX",
+          "53": "Washington/WA",
+          "13": "Georgia/GA",
+          "18": "Indiana/IN",
+          "20": "Kansas/KS",
+          "26": "Michigan/MI",
+          "32": "Nevada/NV",
+          "54": "West Virginia/WV",
+          "55": "Wisconsin/WI",
+          "27": "Minnesota/MN",
+          "16": "Idaho/ID",
+          "19": "Iowa/IA",
+          "22": "Louisiana/LA",
+          "38": "North Dakota/ND",
+          "01": "Alabama/AL",
+          "02": "Alaska/AK",
+          "06": "California/CA",
+          "08": "Colorado/CO",
+          "11": "District of Columbia/DC",
+          "23": "Maine/ME",
+          "34": "New Jersey/NJ",
+          "39": "Ohio/OH",
+          "10": "Delaware/DE",
+          "56": "Wyoming/WY",
+          "21": "Kentucky/KY",
+          "24": "Maryland/MD",
+          "44": "Rhode Island/RI",
+          "46": "South Dakota/SD",
+          "17": "Illinois/IL",
+          "29": "Missouri/MO",
+          "31": "Nebraska/NE",
+          "36": "New York/NY",
+          "40": "Oklahoma/OK",
+          "41": "Oregon/OR"
+        }'
+
+  states = fromJSON(stateMap)
+  for (i in 1:length(states)){
+    if (grepl(toupper(stateStr), toupper(states[i]), fixed=TRUE)){
+      return(as.numeric(names(states[i])))
+    }
+  }
+  stop("Bad State Name")
+
+}
+
+getStateCode("ar")
+
+
+
+```
+
+### Helper For Getting Division
+
+User Must Specify the exact division name (not case sensitive)
+```{r}
+getDivisionCode = function(divisionStr){
+  
+  divisionsMap =  '{
+          "7": "West South Central",
+          "2": "Middle Atlantic",
+          "4": "West North Central",
+          "6": "East South Central",
+          "3": "East North Central",
+          "9": "Pacific",
+          "0": "Puerto Rico",
+          "5": "South Atlantic",
+          "8": "Mountain",
+          "1": "New England"
+        }'
+  divisions = fromJSON(divisionsMap)
+  for (i in 1:length(divisions)){
+    if (toupper(divisionStr) == toupper(divisions[i])){
+      return(as.numeric(names(divisions[i])))
+    }
+  }
+  stop("Bad Division Name")
+  
+}
+
+getDivisionCode("mountain")
+```
+
+### Helper For Getting Region
+
+User Must Specify the exact region name (not case sensitive)
+```{r}
+getRegionCode = function(regionStr){
+  
+  regionsMap =  '{
+          "1": "Northeast",
+          "9": "Puerto Rico",
+          "3": "South",
+          "4": "West",
+          "2": "Midwest"
+        }'
+  regions = fromJSON(regionsMap)
+  for (i in 1:length(regions)){
+    if (toupper(regionStr) == toupper(regions[i])){
+      return(as.numeric(names(regions[i])))
+    }
+  }
+  stop("Bad Region Name")
+  
+}
+
+getRegionCode("west")
+```
 
 ```{r}
 getCensusData = function(year = 2022, 
@@ -167,22 +305,45 @@ getCensusData = function(year = 2022,
   }
   
   ## Region: Check if the user only gives 1 region and it's in the list
-  acceptableRegionLabels = c("Region", "Division", "State")
+  geoLevel = tolower(geoLevel)
+  acceptableRegionLabels = c("region", "division", "state", "all")
   if (!(geoLevel %in% acceptableRegionLabels) & (length(geoLevel) ==1)){
     stop("Bad Geography Variable Input Try Again")
   }
   
+  
+  if (geoLevel == 'state'){
+    geoId = getStateCode(spec)
+  }
+  else if (geoLevel == 'division'){
+    geoId = getDivisionCode(spec)
+  }
+  else if (geoLevel == 'region'){
+    geoId = getRegionCode(spec)
+  }
+  else{
+    geoId = '*'
+  }
+
+  
   ## Build API Call URL
   
-  baseUrl = "https://api.census.gov/data/2024/acs/acs1/pums?"
+  baseUrl = paste0("https://api.census.gov/data/",year,"/acs/acs1/pums?")
+  numVarStr = paste(numericVars, collapse = ",")
+  catVarStr = paste(categoricalVars, collapse = ",")
+  vars = paste(numVarStr, catVarStr, sep = ',')
+  varsUrl = paste0("get=", vars)
+  geoLevelUrl = paste0("for=",geoLevel,":",geoId)
+  keyUrl = paste0("key=",apiKey)
+  finalUrl = paste0(baseUrl,varsUrl,'&',geoLevelUrl,'&',keyUrl)
   
+  ### Call API and turn result into a tibble
+  resp = httr::GET(finalUrl)
+
+  return(rawtoTibble(resp$content))
   
-  
-  
-  return("Made it")
 }
 
 
-
-getCensusData(geoLevel = c("Region"))
+getCensusData(numericVars = c("AGEP", "GASP"), categoricalVars = c("FER", "HHL"))
 ```
