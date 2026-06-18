@@ -340,10 +340,38 @@ getCensusData = function(year = 2022,
   ### Call API and turn result into a tibble
   resp = httr::GET(finalUrl)
 
-  return(rawtoTibble(resp$content))
+  respTibble =rawtoTibble(resp$content)
   
+  ## Cast Categorial Variables into factors
+  for (i in 1:length(names(respTibble))){
+    column = respTibble[ ,i]
+    colName = names(column)
+    print(colName)
+    if(colName %in% categoricalVars){
+      print("1")
+      respTibble[[colName]] = as.factor(column[[colName]])
+      
+    }
+    else if(colName %in% numericVars){
+      print("2")
+      respTibble[[colName]] = as.numeric(column[[colName]])
+    }
+    
+  }
+  
+  
+  
+  return(respTibble)
+  
+    
 }
 
 
-getCensusData(numericVars = c("AGEP", "GASP"), categoricalVars = c("FER", "HHL"))
+test = getCensusData(numericVars = c("AGEP", "GASP"), categoricalVars = c("FER", "HHL"))
 ```
+
+
+```{r}
+test
+```
+
