@@ -15,6 +15,8 @@ editor: visual
 library(httr)
 library(jsonlite)
 library(tidyverse)
+library(lubridate)
+library(hms)
 apiKey = "4c8e34087cd2fa65ceac20aca5e806b356fffe37"
 ```
 
@@ -131,14 +133,10 @@ For missing time values, assign the value an NA
 
 One numeric variable other than PWGTP must be returned (Check for this in input)
 
-### Helper For Returning State Code
-
-This function can take strings of many forms representing the desired state and return the corresponding state code needed to query the API
+### Defining Codes to JSON Early
 
 ```{r}
-
-getStateCode = function(stateStr){
-  stateMap = '{
+stateMap = '{
           "47": "Tennessee/TN",
           "04": "Arizona/AZ",
           "05": "Arkansas/AR",
@@ -193,7 +191,325 @@ getStateCode = function(stateStr){
           "41": "Oregon/OR"
         }'
 
-  states = fromJSON(stateMap)
+states = fromJSON(stateMap)
+
+
+divisionsMap =  '{
+          "7": "West South Central",
+          "2": "Middle Atlantic",
+          "4": "West North Central",
+          "6": "East South Central",
+          "3": "East North Central",
+          "9": "Pacific",
+          "0": "Puerto Rico",
+          "5": "South Atlantic",
+          "8": "Mountain",
+          "1": "New England"
+        }'
+divisions = fromJSON(divisionsMap)
+
+
+  timeCodes = '{
+  "0": "NA",
+  "001": "120",
+  "002": "420",
+  "003": "720",
+  "004": "1020",
+  "005": "1320",
+  "006": "1620",
+  "007": "2070",
+  "008": "2520",
+  "009": "2820",
+  "010": "3270",
+  "011": "3720",
+  "012": "4020",
+  "013": "4320",
+  "014": "4620",
+  "015": "4920",
+  "016": "5220",
+  "017": "5520",
+  "018": "5820",
+  "019": "6120",
+  "020": "6420",
+  "021": "6870",
+  "022": "7320",
+  "023": "7620",
+  "024": "7920",
+  "025": "8220",
+  "026": "8520",
+  "027": "8820",
+  "028": "9120",
+  "029": "9420",
+  "030": "9720",
+  "031": "10020",
+  "032": "10320",
+  "033": "10620",
+  "034": "10920",
+  "035": "11220",
+  "036": "11520",
+  "037": "11820",
+  "038": "12120",
+  "039": "12420",
+  "040": "12720",
+  "041": "13020",
+  "042": "13320",
+  "043": "13620",
+  "044": "13920",
+  "045": "14220",
+  "046": "14520",
+  "047": "14820",
+  "048": "15120",
+  "049": "15420",
+  "050": "15720",
+  "051": "16020",
+  "052": "16320",
+  "053": "16620",
+  "054": "16920",
+  "055": "17220",
+  "056": "17520",
+  "057": "17820",
+  "058": "18120",
+  "059": "18420",
+  "060": "18720",
+  "061": "19020",
+  "062": "19320",
+  "063": "19620",
+  "064": "19920",
+  "065": "20220",
+  "066": "20520",
+  "067": "20820",
+  "068": "21120",
+  "069": "21420",
+  "070": "21720",
+  "071": "22020",
+  "072": "22320",
+  "073": "22620",
+  "074": "22920",
+  "075": "23220",
+  "076": "23520",
+  "077": "23820",
+  "078": "24120",
+  "079": "24420",
+  "080": "24720",
+  "081": "25020",
+  "082": "25320",
+  "083": "25620",
+  "084": "25920",
+  "085": "26220",
+  "086": "26520",
+  "087": "26820",
+  "088": "27120",
+  "089": "27420",
+  "090": "27720",
+  "091": "28020",
+  "092": "28320",
+  "093": "28620",
+  "094": "28920",
+  "095": "29220",
+  "096": "29520",
+  "097": "29820",
+  "098": "30120",
+  "099": "30420",
+  "100": "30720",
+  "101": "31020",
+  "102": "31320",
+  "103": "31620",
+  "104": "31920",
+  "105": "32220",
+  "106": "32520",
+  "107": "32820",
+  "108": "33120",
+  "109": "33420",
+  "110": "33720",
+  "111": "34020",
+  "112": "34320",
+  "113": "34620",
+  "114": "34920",
+  "115": "35220",
+  "116": "35520",
+  "117": "35820",
+  "118": "36120",
+  "119": "36420",
+  "120": "36720",
+  "121": "37020",
+  "122": "37320",
+  "123": "37620",
+  "124": "37920",
+  "125": "38220",
+  "126": "38520",
+  "127": "38820",
+  "128": "39120",
+  "129": "39420",
+  "130": "39720",
+  "131": "40020",
+  "132": "40320",
+  "133": "40620",
+  "134": "40920",
+  "135": "41220",
+  "136": "41520",
+  "137": "41820",
+  "138": "42120",
+  "139": "42420",
+  "140": "42720",
+  "141": "43020",
+  "142": "43320",
+  "143": "43620",
+  "144": "43920",
+  "145": "44220",
+  "146": "44520",
+  "147": "44820",
+  "148": "45120",
+  "149": "45420",
+  "150": "45720",
+  "151": "46020",
+  "152": "46320",
+  "153": "46620",
+  "154": "46920",
+  "155": "47220",
+  "156": "47520",
+  "157": "47820",
+  "158": "48120",
+  "159": "48420",
+  "160": "48720",
+  "161": "49020",
+  "162": "49320",
+  "163": "49620",
+  "164": "49920",
+  "165": "50220",
+  "166": "50520",
+  "167": "50820",
+  "168": "51120",
+  "169": "51420",
+  "170": "51720",
+  "171": "52020",
+  "172": "52320",
+  "173": "52620",
+  "174": "52920",
+  "175": "53220",
+  "176": "53520",
+  "177": "53820",
+  "178": "54120",
+  "179": "54420",
+  "180": "54720",
+  "181": "55020",
+  "182": "55320",
+  "183": "55620",
+  "184": "55920",
+  "185": "56220",
+  "186": "56520",
+  "187": "56820",
+  "188": "57120",
+  "189": "57420",
+  "190": "57720",
+  "191": "58020",
+  "192": "58320",
+  "193": "58620",
+  "194": "58920",
+  "195": "59220",
+  "196": "59520",
+  "197": "59820",
+  "198": "60120",
+  "199": "60420",
+  "200": "60720",
+  "201": "61020",
+  "202": "61320",
+  "203": "61620",
+  "204": "61920",
+  "205": "62220",
+  "206": "62520",
+  "207": "62820",
+  "208": "63120",
+  "209": "63420",
+  "210": "63720",
+  "211": "64020",
+  "212": "64320",
+  "213": "64620",
+  "214": "64920",
+  "215": "65220",
+  "216": "65520",
+  "217": "65820",
+  "218": "66120",
+  "219": "66420",
+  "220": "66720",
+  "221": "67020",
+  "222": "67320",
+  "223": "67620",
+  "224": "67920",
+  "225": "68220",
+  "226": "68520",
+  "227": "68820",
+  "228": "69120",
+  "229": "69420",
+  "230": "69720",
+  "231": "70020",
+  "232": "70320",
+  "233": "70620",
+  "234": "70920",
+  "235": "71220",
+  "236": "71520",
+  "237": "71820",
+  "238": "72120",
+  "239": "72420",
+  "240": "72720",
+  "241": "73020",
+  "242": "73320",
+  "243": "73620",
+  "244": "73920",
+  "245": "74220",
+  "246": "74520",
+  "247": "74820",
+  "248": "75120",
+  "249": "75420",
+  "250": "75720",
+  "251": "76020",
+  "252": "76320",
+  "253": "76620",
+  "254": "76920",
+  "255": "77220",
+  "256": "77520",
+  "257": "77820",
+  "258": "78120",
+  "259": "78420",
+  "260": "78720",
+  "261": "79020",
+  "262": "79320",
+  "263": "79620",
+  "264": "79920",
+  "265": "80220",
+  "266": "80520",
+  "267": "80820",
+  "268": "81120",
+  "269": "81420",
+  "270": "81720",
+  "271": "82020",
+  "272": "82320",
+  "273": "82620",
+  "274": "82920",
+  "275": "83220",
+  "276": "83520",
+  "277": "83820",
+  "278": "84120",
+  "279": "84420",
+  "280": "84720",
+  "281": "85020",
+  "282": "85320",
+  "283": "85620",
+  "284": "85920",
+  "285": "86220"
+}'
+
+times = (fromJSON(timeCodes))
+```
+
+
+### Helper For Returning State Code
+
+This function can take strings of many forms representing the desired state and return the corresponding state code needed to query the API
+
+```{r}
+
+getStateCode = function(stateStr){
+  
   for (i in 1:length(states)){
     if (grepl(toupper(stateStr), toupper(states[i]), fixed=TRUE)){
       return(as.numeric(names(states[i])))
@@ -215,19 +531,7 @@ User Must Specify the exact division name (not case sensitive)
 ```{r}
 getDivisionCode = function(divisionStr){
   
-  divisionsMap =  '{
-          "7": "West South Central",
-          "2": "Middle Atlantic",
-          "4": "West North Central",
-          "6": "East South Central",
-          "3": "East North Central",
-          "9": "Pacific",
-          "0": "Puerto Rico",
-          "5": "South Atlantic",
-          "8": "Mountain",
-          "1": "New England"
-        }'
-  divisions = fromJSON(divisionsMap)
+  
   for (i in 1:length(divisions)){
     if (toupper(divisionStr) == toupper(divisions[i])){
       return(as.numeric(names(divisions[i])))
@@ -265,8 +569,29 @@ getRegionCode = function(regionStr){
 
 getRegionCode("west")
 ```
+### Helper to Convert Time Code to Time Stamp (hh:mm:ss)
 
 ```{r}
+
+dateMatrix = as.numeric(dateMatrix)
+
+codeToTime = function(timeStr){
+  
+
+  
+  for (i in 1:length(times)){
+    if (timeStr == names(times[i])){
+      return(as_hms(as.numeric(times[i])))
+    }
+  }
+}
+  
+  
+```
+
+
+```{r}
+#| warning: false
 getCensusData = function(year = 2022, 
                          numericVars = c("AGEP"),
                          categoricalVars = c("SEX"),
@@ -348,17 +673,27 @@ getCensusData = function(year = 2022,
     colName = names(column)
     print(colName)
     if(colName %in% categoricalVars){
-      print("1")
       respTibble[[colName]] = as.factor(column[[colName]])
       
     }
     else if(colName %in% numericVars){
-      print("2")
       respTibble[[colName]] = as.numeric(column[[colName]])
     }
     
   }
   
+  ## Format Timestamps
+  cols = colnames(respTibble)
+  for (i in 1:length(cols)){
+    colName = names(respTibble)[i]
+    print(colName)
+    print(col)
+    if (colName == "JWAP" | colName == "JWDP"){
+      respTibble[[colName]] = apply(respTibble[colName],MARGIN = 1, FUN = codeToTime)
+    }
+  }
+  
+  class(respTibble) <- c("census", class(your_tibble))
   
   
   return(respTibble)
@@ -367,11 +702,14 @@ getCensusData = function(year = 2022,
 }
 
 
-test = getCensusData(numericVars = c("AGEP", "GASP"), categoricalVars = c("FER", "HHL"))
+test = getCensusData(numericVars = c("AGEP", "GASP", "JWAP"), categoricalVars = c("FER", "HHL"))
 ```
 
 
 ```{r}
-test
-```
 
+summary.census <- function(tib, numVars = "all", catVars = "all"){
+  
+}
+
+```
