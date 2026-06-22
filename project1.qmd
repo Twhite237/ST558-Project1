@@ -17,6 +17,7 @@ library(jsonlite)
 library(tidyverse)
 library(lubridate)
 library(hms)
+library(ggplot2)
 apiKey = "4c8e34087cd2fa65ceac20aca5e806b356fffe37"
 ```
 
@@ -573,7 +574,7 @@ getRegionCode("west")
 
 ```{r}
 
-dateMatrix = as.numeric(dateMatrix)
+#dateMatrix = as.numeric(dateMatrix)
 
 codeToTime = function(timeStr){
   
@@ -654,7 +655,7 @@ getCensusData = function(year = 2022,
   ## Build API Call URL
   
   baseUrl = paste0("https://api.census.gov/data/",year,"/acs/acs1/pums?")
-  numVarStr = paste(numericVars, collapse = ",")
+  numVarStr = paste(c("PWGTP",numericVars), collapse = ",")
   catVarStr = paste(categoricalVars, collapse = ",")
   vars = paste(numVarStr, catVarStr, sep = ',')
   varsUrl = paste0("get=", vars)
@@ -671,7 +672,6 @@ getCensusData = function(year = 2022,
   for (i in 1:length(names(respTibble))){
     column = respTibble[ ,i]
     colName = names(column)
-    print(colName)
     if(colName %in% categoricalVars){
       respTibble[[colName]] = as.factor(column[[colName]])
       
@@ -681,6 +681,8 @@ getCensusData = function(year = 2022,
     }
     
   }
+  
+  respTibble[["PWGTP"]] = as.numeric(respTibble[["PWGTP"]])
   
   ## Format Timestamps
   cols = colnames(respTibble)
@@ -693,7 +695,8 @@ getCensusData = function(year = 2022,
     }
   }
   
-  class(respTibble) <- c("census", class(your_tibble))
+  
+  class(respTibble) <- c("census", class(respTibble))
   
   
   return(respTibble)
@@ -702,7 +705,38 @@ getCensusData = function(year = 2022,
 }
 
 
-test = getCensusData(numericVars = c("AGEP", "GASP", "JWAP"), categoricalVars = c("FER", "HHL"))
+test = getCensusData(numericVars = c("AGEP", "GASP", "JWAP"), categoricalVars = c("FER", "HHL"), geoLevel = "region", spec = "northeast")
+```
+
+```{r}
+getCensusDataYears = function(years = c(2022), 
+                         numericVars = c("AGEP"),
+                         categoricalVars = c("SEX"),
+                         geoLevel = "State",
+                         spec = "NC"){
+  for (i in 1:length(years)){
+    if (i > 1){
+      yearDataOld <- yearDataNew
+    }
+    print("Here")
+    yearDataNew <- getCensusData(year = years[i], 
+                             numericVars = numericVars,
+                             categoricalVars = categoricalVars,
+                             geoLevel = geoLevel,
+                             spec = "spec")
+    print("There")
+    if (i > 1){
+      yearData = rbind(yearDataOld, yearDataNew)
+    }
+  }
+  return(yearData)
+}
+
+getCensusDataYears(years = c(2021,2022))
+```
+
+```{r}
+head(test)
 ```
 
 
@@ -710,6 +744,59 @@ test = getCensusData(numericVars = c("AGEP", "GASP", "JWAP"), categoricalVars = 
 
 summary.census <- function(tib, numVars = "all", catVars = "all"){
   
+  tib = tib |> select(-PWGTP)
+  if(numVars != "all"){
+    numVars = names(tib |> select(numVars))
+  }
+  else{
+    numVars = names(tib |> select(where(is.numeric)))
+  }
+  
+  if(catVars != "all"){
+    catVars = names(tib |> select(catVars))
+  }
+  else{
+    catVars = names(tib |> select(where(is.factor)))
+  }
+  
+  vars = c(numVars, catVars)
+  
+  tib = tib |> select(vars)
+  
+  numSummaries = tib |> drop_na() |>
+    summarize(across(where(is.numeric),
+                     list("mean" = mean, "standardDev" = sd),
+                     .names = "{.fn}_{.col}"))
+  catSummaries = list()
+  for (i in 1:length(catVars)){
+    var = catVars[i]
+    varSummary = tib |> group_by(!!sym(var)) |>
+      select(var) |>
+      summarize (count = n())
+    catSummaries[[i]] = varSummary
+  }
+  
+    
+  return(list(numSummaries, catSummaries))
+    
 }
 
+summary(test)
+
 ```
+
+
+```{r}
+## Plot function
+plot.census <- function(tib, numVar, catVar){
+  g <- ggplot(tib |> drop_na(), aes(x = !!sym(numVar)))
+  g + geom_boxplot(alpha = 0.5, aes(fill = !!sym(catVar),weight = PWGTP))
+}
+
+
+plot(test, numVar = "AGEP", catVar = "FER")
+
+
+
+```
+
