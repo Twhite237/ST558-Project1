@@ -8,6 +8,14 @@ editor: visual
 
 ## Executive Summary:
 
+In this project, I will explore the Public Use Microdata Sample (PUMS) Census data set. The PUMS data set is a curated data set that is derived from the US Census, made anonymous, and generalized to simulate individual census responses without actually including actual responses. The PUMS data is made available over an API, which will be investigated in this report. After investigating the data that comes from the API and its structure, the methods for creating function/s for querying this API systematically will be detailed, along with methods for summarizing and visualizing the results. Finally, an investigation will be done that will leverage the PUMS data and functions written to glean real-world insight.
+
+-   Exploration of the PUMS API
+
+-   Methods for Data Collection and Analysis
+
+-   Application
+
 ## Prerequisites:
 
 ```{r}
@@ -21,9 +29,9 @@ library(ggplot2)
 apiKey = "4c8e34087cd2fa65ceac20aca5e806b356fffe37"
 ```
 
-## Working with the PUMS API
+## Exploring the PUMS API
 
-First, we will test the API to see the types of data that it provides
+First, we will test the API to see the types of data that it provides.
 
 ```{r}
 
@@ -32,17 +40,18 @@ resp = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,M
 resp$status_code
 ```
 
+I received a good response code, meaning that the API key and generic URL are working as expected. Now to move on to interrogating the data from the API
+
 ```{r}
 respString = rawToChar(resp$content)
 
-respString
 ```
 
 The data looks to be formatted like a list of lists. The first row are the requested column headers, and each subsequent row represents an individual in the census. We will need to figure out how to translate the the large character string into a tibble.
 
-After some research, this is a form of JSON, so we can use the fromJSON() function to convert to a matrix.
+After some research, this data is a form of JSON, so we can use the fromJSON() function to convert to a matrix.
 
-First we will see if we can convert to a matrix, then let's confirm.
+First we will see if we can convert to a matrix. Then from there, we can easily convert to a tibble.
 
 ```{r}
 
@@ -51,7 +60,7 @@ respMat = (fromJSON((respString)))
 class(respMat)
 ```
 
-This is a matrix, try to format as a tibble
+This is a matrix, let's try to format as a tibble next.
 
 ```{r}
 census = as_tibble(respMat)
@@ -64,7 +73,6 @@ This is better, but the first row should be column headers.
 ```{r}
 
 
-
 names(census) = census[1,]
 
 census = census |> slice(-1)
@@ -74,9 +82,21 @@ head(census)
 
 ```
 
-Looks good!
+Looks good! We will use a similar pattern to create a function that retrieves PUMS data for a variety of inputs from the user
 
-## Helper Function to Convert API Response
+## Methods for Data Collection and Analysis
+
+First, we will pre-define a few helper functions and variables that will help us along the way. The helper functions and variables accomplish a few goals:
+
+-   Convert raw responses from the API to a tibble, which we can further manipulate using tidyverse functions we know and love.
+
+-   Convert variable encodings from JSON strings to arrays with name/value pairs. These will be defined up front and converted to arrays up front to save execution time later on in the program, since these encodings will be used frequently.
+
+-   Map user inputs to variable encoding. Since the API provides categorical variables in numeric encodings (ex - the state "47" in the API represents Tennessee), we will write some helper functions that will allow users to provide intuitive inputs to the function to query the API more easily.
+
+-   Convert variables representing time stamps to a useful format. We will use the lubridate package to write a function that takes in numeric code representing a time of day and return a helpful time stamp in the format of hh:mm:ss.
+
+### Helper Function to Convert API Response to Tibble
 
 The helper function will take a raw response from an API call and return a tibble.
 
@@ -108,31 +128,7 @@ test = httr::GET("https://api.census.gov/data/2024/acs/acs1/pums?get=SEX,PWGTP,M
 
 head(rawtoTibble(test$content))
 
-
-
 ```
-
-## Write Main Function
-
-This function will take in a number of user inputs and return a tibble with the census data corresponding to the API call
-
-Requirements:
-
-Year:
-
--   Inputs
-
-    -   Should be a integer between 2010 and 2022
-
-Numeric Variables:
-Options for the user should be AGEP, GASP, GRPIP, JWAP (time), JWDP (time), and
-JWMNP
-
-Your function should turn variables into numeric values or time values (use the middle of the time period) where appropriate. This might require you to write a helper function or two!
-
-For missing time values, assign the value an NA
-
-One numeric variable other than PWGTP must be returned (Check for this in input)
 
 ### Defining Codes to JSON Early
 
@@ -502,7 +498,6 @@ divisions = fromJSON(divisionsMap)
 times = (fromJSON(timeCodes))
 ```
 
-
 ### Helper For Returning State Code
 
 This function can take strings of many forms representing the desired state and return the corresponding state code needed to query the API
@@ -529,6 +524,7 @@ getStateCode("ar")
 ### Helper For Getting Division
 
 User Must Specify the exact division name (not case sensitive)
+
 ```{r}
 getDivisionCode = function(divisionStr){
   
@@ -548,6 +544,7 @@ getDivisionCode("mountain")
 ### Helper For Getting Region
 
 User Must Specify the exact region name (not case sensitive)
+
 ```{r}
 getRegionCode = function(regionStr){
   
@@ -570,6 +567,7 @@ getRegionCode = function(regionStr){
 
 getRegionCode("west")
 ```
+
 ### Helper to Convert Time Code to Time Stamp (hh:mm:ss)
 
 ```{r}
@@ -577,8 +575,6 @@ getRegionCode("west")
 #dateMatrix = as.numeric(dateMatrix)
 
 codeToTime = function(timeStr){
-  
-
   
   for (i in 1:length(times)){
     if (timeStr == names(times[i])){
@@ -590,6 +586,45 @@ codeToTime = function(timeStr){
   
 ```
 
+### Define Function to Query the PUMS API Main Function
+
+The purpose of the function getCensusData() is to take in a user input for details about the data they would like to query from the PUMS API and output a tibble with the requested data that is ready for analysis.
+
+Inputs:
+
+-   Year: The year in which the user should query the API (integer)
+
+-   NumericVars: The numeric variables that the user would like to query from the API. Available options are AGEP, GASP, GRPIP, JWAP, JWDP, JWMNP
+
+-   CategoricalVars: The categorical variables that the user would like to query from the API. Available options are FER, HHL, SCHL, SCHL, and SEX.
+
+-   GeoLevel: The level of geography in which the user would like to search (region, division, state, or all)
+
+-   Spec: For a specified value of geoLevel, the actual value of the geoLevel should be provided for the API to filter on the desired region (region, division, state)
+
+Output:
+
+A tibble with all categorical and numeric variables property type casted and ready for analyses. The returned tibble will also include the PWGTP variable, which represents the estimated number of replicates with the same census responses.
+
+Error Handling Features:
+
+-   User provides a data that is not within the range of the PUMS data set
+
+-   User provides an incorrectly spelled variable
+
+-   User did not provide any of the pre-defined variables
+
+-   User provides in incorrectly specified geography level or filtering specification
+
+Function Flow:
+
+The function uses the helpers defined above to query th
+
+1.  Check Inputs: If the user provides invalid inputs, catch them before querying the API
+2.  Map user inputs to API Substrings: Parse user inputs and transform them so that they can be used for an API call
+3.  Build the API String: Concatenate the transformed user inputs into one API call string
+4.  Query the API: Use the helper function to query the API and return the results as a tibble
+5.  Transform Variables: Cast the variables in the returned tibble to their intended types.
 
 ```{r}
 #| warning: false
@@ -688,14 +723,14 @@ getCensusData = function(year = 2022,
   cols = colnames(respTibble)
   for (i in 1:length(cols)){
     colName = names(respTibble)[i]
-    print(colName)
-    print(col)
     if (colName == "JWAP" | colName == "JWDP"){
       respTibble[[colName]] = apply(respTibble[colName],MARGIN = 1, FUN = codeToTime)
     }
   }
   
-  
+  ## Add year
+  respTibble = respTibble |> mutate(year = year)
+  ## Assign Class
   class(respTibble) <- c("census", class(respTibble))
   
   
@@ -708,6 +743,10 @@ getCensusData = function(year = 2022,
 test = getCensusData(numericVars = c("AGEP", "GASP", "JWAP"), categoricalVars = c("FER", "HHL"), geoLevel = "region", spec = "northeast")
 ```
 
+### Define Function to Query Multiple Years of Census Data
+
+The function below takes in the same inputs as the getCensusData() function, except for the variable "years" can be an array of years that represents years that the user would like to query. This function will call getCensusData() for each year provided and combine the results into one tibble.
+
 ```{r}
 getCensusDataYears = function(years = c(2022), 
                          numericVars = c("AGEP"),
@@ -718,13 +757,14 @@ getCensusDataYears = function(years = c(2022),
     if (i > 1){
       yearDataOld <- yearDataNew
     }
-    print("Here")
     yearDataNew <- getCensusData(year = years[i], 
                              numericVars = numericVars,
                              categoricalVars = categoricalVars,
                              geoLevel = geoLevel,
-                             spec = "spec")
-    print("There")
+                             spec = spec)
+    if (length(years) == 1){
+      return(yearDataNew)
+    }
     if (i > 1){
       yearData = rbind(yearDataOld, yearDataNew)
     }
@@ -732,19 +772,23 @@ getCensusDataYears = function(years = c(2022),
   return(yearData)
 }
 
-getCensusDataYears(years = c(2021,2022))
+head(getCensusDataYears(years = c(2019, 2018)))
+
 ```
 
-```{r}
-head(test)
-```
+### Define summarize() Function for the census Class
 
+For a tibble with the class "census", this function will return a summary of numeric and categorical variables. These summaries will be provided in a list.
+
+For numeric variables, the sample mean and sample standard deviation will be provided
+
+For categorical variables, the count of each level of the variable will be provided.
 
 ```{r}
 
 summary.census <- function(tib, numVars = "all", catVars = "all"){
   
-  tib = tib |> select(-PWGTP)
+  tib = tib |> select(-c(PWGTP, year))
   if(numVars != "all"){
     numVars = names(tib |> select(numVars))
   }
@@ -774,10 +818,13 @@ summary.census <- function(tib, numVars = "all", catVars = "all"){
       select(var) |>
       summarize (count = n())
     catSummaries[[i]] = varSummary
+    names(catSummaries)[[i]] = paste0(var,"Summary")
   }
   
+  summaries = list(numericVariableSummaries = numSummaries,
+                   categoricalVariableSummaries = catSummaries)
     
-  return(list(numSummaries, catSummaries))
+  return(summaries)
     
 }
 
@@ -785,6 +832,14 @@ summary(test)
 
 ```
 
+List is named contextually to be able to extract results
+```{r}
+str(summary(test))
+```
+
+### Define plot() function for census Objects
+
+This function will take in a tibble of class "census", as well as a numeric and categorical variable within the tibble and return a box plot of the numeric variable at each level of the categorical variable.
 
 ```{r}
 ## Plot function
@@ -800,3 +855,104 @@ plot(test, numVar = "AGEP", catVar = "FER")
 
 ```
 
+## Research Question
+
+I am not a fan of commuting! Whether it's the gas prices, the time spend in the car that I could be spending learning statistics, or the requirement to get up earlier, a shorter commute is always better. I want to investigate factors that may lead to a shorter commute time.
+
+By using the functions I just created, I will compare commute times across different levels of education completed. I'll look at the years 2020 and 2021 in North Carolina first. As a result, I should be looking at the variables "SCHL" (education level completed) and JWMNP (travel time to work).
+
+```{r}
+
+commuteTime = getCensusDataYears(years = c(2021,2022), 
+                         numericVars = c("JWMNP"),
+                         categoricalVars = c("SCHL"),
+                         geoLevel = "State",
+                         spec = "NC")
+```
+
+```{r}
+head(commuteTime)
+```
+
+Let's visualize these together.
+
+```{r}
+
+
+plot(commuteTime, numVar = "JWMNP", catVar = "SCHL")
+```
+
+This is seems like we have way to much to analyze here. Especially provided many of the schooling codes don't apply to someone my age (like someone who's in kindergarten), I will filter the data set to only include levels of education from high school and on.
+
+```{r}
+commuteTime = commuteTime |> filter(SCHL == "16" |
+                                    SCHL == "23" |
+                                    SCHL == "19" |
+                                    SCHL == "22" |
+                                    SCHL == "20" |
+                                    SCHL == "21" |
+                                    SCHL == "24" |
+                                    SCHL == "17" |
+                                    SCHL == "18")
+
+
+plot(commuteTime, numVar = "JWMNP", catVar = "SCHL")
+
+
+```
+
+```{r}
+summary(commuteTime)
+```
+
+Each group has a very similar spread, with centers varying anywhere from 0 to 20 minutes. This seems pretty low. Lots of folks across all levels of education. Additionally, the summary of the commute time tells us that the mean commute time was 9 minutes with a standard deviation of around 17.5 minutes.
+
+These distributions definitely do not look normally distributed either. Let's look at the distribution of the commute time
+
+```{r}
+g = g <- ggplot(commuteTime , aes(x = JWMNP))
+g + geom_density(alpha = 0.5, aes(fill = SCHL ,weight = PWGTP))
+```
+
+Across all levels of schooling (filtered down) the distribution of commute time is definitely skewed right, with most of the observations being very short commutes (less than 30 mins)
+
+I'm wondering if COVID has affected this. Let's repeat the process but instead of 2022 and 2021, let's look at the years 2018 and 2019.
+
+```{r}
+commuteTimePre = getCensusDataYears(years = c(2018,2019), 
+                         numericVars = c("JWMNP"),
+                         categoricalVars = c("SCHL"),
+                         geoLevel = "State",
+                         spec = "NC")
+```
+
+```{r}
+commuteTimePre = commuteTimePre |> filter(SCHL == "16" |
+                                    SCHL == "23" |
+                                    SCHL == "19" |
+                                    SCHL == "22" |
+                                    SCHL == "20" |
+                                    SCHL == "21" |
+                                    SCHL == "24" |
+                                    SCHL == "17" |
+                                    SCHL == "18")
+
+
+plot(commuteTimePre, numVar = "JWMNP", catVar = "SCHL")
+```
+
+```{r}
+summary(commuteTimePre)
+```
+
+```{r}
+g = g <- ggplot(commuteTimePre , aes(x = JWMNP))
+g + geom_density(alpha = 0.5, aes(fill = SCHL ,weight = PWGTP))
+
+```
+
+There are some interesting results here!
+
+-   First, the mean commute time dropped by around 2 minutes after the pandemic. This could be indicative of the increase in remote work. We also see this in the distributions of commute time across levels of education with more filled out tail representing the higher commute times
+
+-   Next, the pattern in which we observe commute time change by the level of education completed completely changed before and after COVID. Pre-pandemic, we see the median commute time increase fairly consistently as the level of education increased. Post-Pandemic, the median commute times are much more consistent (and consistently lower) across all groups. We saw the drop in commute time decrease drastically across the groups that completed more education. This may be an indication that the jobs that went remote were mostly ones that were held by individuals with more education.
